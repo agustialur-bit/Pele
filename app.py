@@ -14,7 +14,7 @@ st.set_page_config(page_title="Rendiment de l'equip", layout="wide")
 st.sidebar.header("Partit(s)")
 match_input_raw = st.sidebar.text_area(
     "URL(s) o ID(s) de partit (un per línia)",
-    help="Igual que a l'app actual: pots posar-ne un o diversos per analitzar una franja.",
+    help="Pots posar-ne un o diversos per analitzar una franja.",
 )
 
 st.sidebar.header("Llindars mínims de l'entrenador")
