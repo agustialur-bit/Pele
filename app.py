@@ -112,7 +112,7 @@ with tab_resum:
         styled = taula_mostrada.style
         for col, threshold in [("%2", min_2), ("%3", min_3), ("%TL", min_tl)]:
             styled = style_column(styled, col, threshold)
-        styled = styled.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="—")
+        styled = styled.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="Sense tirs")
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
         st.subheader("+/- per jugadora")
@@ -148,7 +148,7 @@ with tab_resum:
         st.markdown("**% acumulats per equip**")
         equip_pct = full_table[full_table["jugadora"] == "EQUIP"][["Equip", "%2", "%3", "%TL"]]
         st.dataframe(
-            equip_pct.style.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="—"),
+            equip_pct.style.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="Sense tirs"),
             use_container_width=True, hide_index=True,
         )
     else:
