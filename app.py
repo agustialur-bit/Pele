@@ -22,6 +22,8 @@ run = st.sidebar.button("Calcula")
 
 if "player_table" not in st.session_state:
     st.session_state.player_table = None
+if "team_names" not in st.session_state:
+    st.session_state.team_names = {}
 
 if run and match_input_raw.strip():
     linies = [l.strip() for l in match_input_raw.strip().split("\n") if l.strip()]
@@ -42,8 +44,19 @@ if run and match_input_raw.strip():
             st.session_state.pm_table = pm_table
             st.session_state.pearson = (r, p)
             st.session_state.df_moves = df_moves
+            st.session_state.equips_ids = equips_ids
+            # Manté els noms ja assignats i afegeix els equips nous amb un nom per defecte
+            for eid in equips_ids:
+                st.session_state.team_names.setdefault(eid, f"Equip {eid[:6]}")
         except Exception as e:
             st.sidebar.error(f"Error carregant el partit: {e}")
+
+if st.session_state.player_table is not None:
+    with st.sidebar.expander("Noms dels equips"):
+        for eid in st.session_state.get("equips_ids", []):
+            st.session_state.team_names[eid] = st.text_input(
+                f"Nom per {eid[:8]}...", value=st.session_state.team_names.get(eid, eid[:8]),
+                key=f"name_{eid}")
 
 tab_resum, tab_exercicis = st.tabs(["Resum", "Exercicis"])
 
@@ -62,25 +75,37 @@ def style_column(styler, col, threshold):
     return styler.applymap(fn, subset=[col])
 
 
+def build_full_table():
+    ft = pd.concat(
+        [st.session_state.player_table, pd.DataFrame(st.session_state.team_rows)],
+        ignore_index=True,
+    )
+    ft["Equip"] = ft["idEquip"].map(st.session_state.team_names).fillna(ft["idEquip"])
+    return ft
+
+
 with tab_resum:
     st.subheader("Percentatges de tir")
 
     if st.session_state.player_table is not None:
-        full_table = pd.concat(
-            [st.session_state.player_table, pd.DataFrame(st.session_state.team_rows)],
-            ignore_index=True,
-        )
+        full_table = build_full_table()
 
-        styled = full_table.style
+        equip_opcions = ["Tots"] + sorted(full_table["Equip"].unique().tolist())
+        equip_sel = st.selectbox("Filtra per equip", equip_opcions, key="filtre_equip")
+        taula_mostrada = full_table if equip_sel == "Tots" else full_table[full_table["Equip"] == equip_sel]
+        taula_mostrada = taula_mostrada[["jugadora", "Equip", "%2", "%3", "%TL"]]
+
+        styled = taula_mostrada.style
         for col, threshold in [("%2", min_2), ("%3", min_3), ("%TL", min_tl)]:
             styled = style_column(styled, col, threshold)
-        st.dataframe(styled, use_container_width=True)
+        styled = styled.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="—")
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
         st.subheader("+/- per jugadora")
-        st.dataframe(st.session_state.pm_table, use_container_width=True)
+        st.dataframe(st.session_state.pm_table, use_container_width=True, hide_index=True)
 
-        r, p = st.session_state.pearson
         st.subheader("Gestió de l'entrenador (Pearson)")
+        r, p = st.session_state.pearson
         st.metric("Correlació minuts vs +/- per minut", r if r == r else "n/a")
         if p == p:
             st.caption(f"p-valor: {p} (significatiu si < 0.05)")
@@ -88,6 +113,20 @@ with tab_resum:
             "Un valor proper a +1 indica que qui més minuts juga és qui més "
             "rendiment aporta. Proper a 0 o negatiu suggereix un possible "
             "desajust entre minutatge i rendiment."
+        )
+
+        pm_chart = st.session_state.pm_table.copy()
+        pm_chart = pm_chart[pm_chart["minuts"] > 0]
+        if not pm_chart.empty:
+            pm_chart["+/- per min"] = (pm_chart["+/-"] / pm_chart["minuts"]).round(3)
+            st.caption("Minuts jugats (x) vs +/- per minut (y) — cada punt és una jugadora.")
+            st.scatter_chart(pm_chart, x="minuts", y="+/- per min")
+
+        st.markdown("**% acumulats per equip**")
+        equip_pct = full_table[full_table["jugadora"] == "EQUIP"][["Equip", "%2", "%3", "%TL"]]
+        st.dataframe(
+            equip_pct.style.format({"%2": "{:.1f}", "%3": "{:.1f}", "%TL": "{:.1f}"}, na_rep="—"),
+            use_container_width=True, hide_index=True,
         )
     else:
         st.info("Introdueix un o més partits a la barra lateral i prem 'Calcula'.")
@@ -105,10 +144,7 @@ with tab_exercicis:
             exercicis_df = pd.DataFrame(columns=["exercici", "url", "tags"])
 
         deficiencies = []
-        full_table = pd.concat(
-            [st.session_state.player_table, pd.DataFrame(st.session_state.team_rows)],
-            ignore_index=True,
-        )
+        full_table = build_full_table()
         for _, row in full_table.iterrows():
             if row["%2"] is not None and row["%2"] < min_2:
                 deficiencies.append(("tir_2", row["jugadora"]))

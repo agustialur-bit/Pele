@@ -29,8 +29,10 @@ def player_shooting_table(df_moves: pd.DataFrame) -> pd.DataFrame:
     for jugadora, g in df_moves.groupby("jugador"):
         if not jugadora or str(jugadora) in ("", "nan"):
             continue
+        eq_id = g["idEquip"].mode().iloc[0] if not g["idEquip"].mode().empty else ""
         rows.append({
             "jugadora": jugadora,
+            "idEquip": eq_id,
             "%2": _pct(g, PAT_2A, PAT_2M),
             "%3": _pct(g, PAT_3A, PAT_3M),
             "%TL": _pct(g, PAT_TLA, PAT_TLM),
@@ -40,7 +42,7 @@ def player_shooting_table(df_moves: pd.DataFrame) -> pd.DataFrame:
 
 def team_shooting_row(df_moves: pd.DataFrame, id_equip: str) -> dict:
     g = df_moves[df_moves["idEquip"] == id_equip]
-    return {"jugadora": "EQUIP", "%2": _pct(g, PAT_2A, PAT_2M),
+    return {"jugadora": "EQUIP", "idEquip": id_equip, "%2": _pct(g, PAT_2A, PAT_2M),
             "%3": _pct(g, PAT_3A, PAT_3M), "%TL": _pct(g, PAT_TLA, PAT_TLM)}
 
 
