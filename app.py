@@ -54,6 +54,14 @@ def highlight_below(val, threshold):
     return "background-color: #f0997b; color: #4A1B0C" if val < threshold else ""
 
 
+def style_column(styler, col, threshold):
+    """Compatible amb pandas antic (Styler.applymap) i nou (Styler.map)."""
+    fn = lambda v: highlight_below(v, threshold)
+    if hasattr(styler, "map"):
+        return styler.map(fn, subset=[col])
+    return styler.applymap(fn, subset=[col])
+
+
 with tab_resum:
     st.subheader("Percentatges de tir")
 
@@ -63,9 +71,9 @@ with tab_resum:
             ignore_index=True,
         )
 
-        styled = full_table.style.applymap(lambda v: highlight_below(v, min_2), subset=["%2"]) \
-                                   .applymap(lambda v: highlight_below(v, min_3), subset=["%3"]) \
-                                   .applymap(lambda v: highlight_below(v, min_tl), subset=["%TL"])
+        styled = full_table.style
+        for col, threshold in [("%2", min_2), ("%3", min_3), ("%TL", min_tl)]:
+            styled = style_column(styled, col, threshold)
         st.dataframe(styled, use_container_width=True)
 
         st.subheader("+/- per jugadora")
