@@ -137,11 +137,11 @@ def plus_minus_per_player(df_moves: pd.DataFrame) -> pd.DataFrame:
                 if rival_id:
                     pc += int(finestra[finestra["idEquip"] == rival_id]["punts"].sum())
 
-            acc = acumulat.setdefault(jug, {"minuts": 0.0, "+/-": 0})
+            acc = acumulat.setdefault(jug, {"minuts": 0.0, "+/-": 0, "idEquip": eq_id})
             acc["minuts"] += minuts
             acc["+/-"] += (pf - pc)
 
-    rows = [{"jugadora": jug, "minuts": round(v["minuts"], 1), "+/-": v["+/-"]}
+    rows = [{"jugadora": jug, "idEquip": v["idEquip"], "minuts": round(v["minuts"], 1), "+/-": v["+/-"]}
             for jug, v in acumulat.items()]
     return pd.DataFrame(rows)
 

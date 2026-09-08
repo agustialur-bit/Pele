@@ -45,9 +45,19 @@ if run and match_input_raw.strip():
             st.session_state.pearson = (r, p)
             st.session_state.df_moves = df_moves
             st.session_state.equips_ids = equips_ids
-            # Manté els noms ja assignats i afegeix els equips nous amb un nom per defecte
-            for eid in equips_ids:
-                st.session_state.team_names.setdefault(eid, f"Equip {eid[:6]}")
+            # Noms per defecte: primer equip que apareix = Local, segon = Visitant
+            # (mateixa convenció que la teva app actual). Si n'hi ha més (diversos
+            # rivals en partits diferents), es numeren.
+            visitants_n = 0
+            for i, eid in enumerate(equips_ids):
+                if eid in st.session_state.team_names:
+                    continue
+                if i == 0:
+                    st.session_state.team_names[eid] = "Equip Local"
+                else:
+                    visitants_n += 1
+                    st.session_state.team_names[eid] = (
+                        "Equip Visitant" if visitants_n == 1 else f"Equip Visitant {visitants_n}")
         except Exception as e:
             st.sidebar.error(f"Error carregant el partit: {e}")
 
@@ -102,11 +112,19 @@ with tab_resum:
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
         st.subheader("+/- per jugadora")
-        st.dataframe(st.session_state.pm_table, use_container_width=True, hide_index=True)
+        pm_display = st.session_state.pm_table.copy()
+        pm_display["Equip"] = pm_display["idEquip"].map(st.session_state.team_names).fillna(pm_display["idEquip"])
+        st.dataframe(pm_display[["jugadora", "Equip", "minuts", "+/-"]], use_container_width=True, hide_index=True)
 
         st.subheader("Gestió de l'entrenador (Pearson)")
-        r, p = st.session_state.pearson
-        st.metric("Correlació minuts vs +/- per minut", r if r == r else "n/a")
+        equip_pearson_opcions = sorted(pm_display["Equip"].unique().tolist())
+        equip_pearson_sel = st.selectbox(
+            "Equip a analitzar", equip_pearson_opcions, key="filtre_equip_pearson",
+            help="El Pearson i la gràfica només tenen sentit calculats dins d'un mateix equip.")
+        pm_equip = pm_display[pm_display["Equip"] == equip_pearson_sel]
+        r, p = coaching_pearson(pm_equip)
+
+        st.metric(f"Correlació minuts vs +/- per minut — {equip_pearson_sel}", r if r == r else "n/a")
         if p == p:
             st.caption(f"p-valor: {p} (significatiu si < 0.05)")
         st.caption(
@@ -115,12 +133,13 @@ with tab_resum:
             "desajust entre minutatge i rendiment."
         )
 
-        pm_chart = st.session_state.pm_table.copy()
-        pm_chart = pm_chart[pm_chart["minuts"] > 0]
+        pm_chart = pm_equip[pm_equip["minuts"] > 0].copy()
         if not pm_chart.empty:
             pm_chart["+/- per min"] = (pm_chart["+/-"] / pm_chart["minuts"]).round(3)
-            st.caption("Minuts jugats (x) vs +/- per minut (y) — cada punt és una jugadora.")
+            st.caption(f"{equip_pearson_sel} — minuts jugats (x) vs +/- per minut (y), cada punt una jugadora.")
             st.scatter_chart(pm_chart, x="minuts", y="+/- per min")
+        else:
+            st.info(f"No hi ha prou minuts registrats per a {equip_pearson_sel}.")
 
         st.markdown("**% acumulats per equip**")
         equip_pct = full_table[full_table["jugadora"] == "EQUIP"][["Equip", "%2", "%3", "%TL"]]
@@ -146,12 +165,13 @@ with tab_exercicis:
         deficiencies = []
         full_table = build_full_table()
         for _, row in full_table.iterrows():
+            qui = row["Equip"] if row["jugadora"] == "EQUIP" else row["jugadora"]
             if row["%2"] is not None and row["%2"] < min_2:
-                deficiencies.append(("tir_2", row["jugadora"]))
+                deficiencies.append(("tir_2", qui))
             if row["%3"] is not None and row["%3"] < min_3:
-                deficiencies.append(("tir_3", row["jugadora"]))
+                deficiencies.append(("tir_3", qui))
             if row["%TL"] is not None and row["%TL"] < min_tl:
-                deficiencies.append(("tirs_lliures", row["jugadora"]))
+                deficiencies.append(("tirs_lliures", qui))
 
         if not deficiencies:
             st.success("Cap jugadora ni l'equip estan per sota dels llindars marcats.")
