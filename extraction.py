@@ -102,11 +102,23 @@ def fetch_and_parse(match_id: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _keep_real_teams(df_partit: pd.DataFrame) -> pd.DataFrame:
+    """Alguns esdeveniments del play-by-play (inici/fi de període, salts,
+    incidències) poden portar un idEquip que no és cap dels dos equips reals
+    del partit. Ens quedem només amb els dos idEquip amb més jugades —
+    els altres (equips 'fantasma' sense tirs de veritat) es descarten."""
+    if df_partit.empty:
+        return df_partit
+    ids_reals = df_partit["idEquip"].value_counts().head(2).index.tolist()
+    return df_partit[df_partit["idEquip"].isin(ids_reals)]
+
+
 def extract_matches(match_ids: list) -> pd.DataFrame:
     """Extreu i concatena diversos partits (per finestres de N jornades)."""
     frames = []
     for mid in match_ids:
         df = fetch_and_parse(mid)
         df["match_id"] = mid
+        df = _keep_real_teams(df)
         frames.append(df)
     return pd.concat(frames, ignore_index=True)
