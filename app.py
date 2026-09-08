@@ -1,8 +1,12 @@
 import streamlit as st
 import pandas as pd
+import os
 
 from extraction import extract_matches, extract_match_id
 from metrics import player_shooting_table, team_shooting_row, plus_minus_per_player, coaching_pearson
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+EXERCICIS_PATH = os.path.join(APP_DIR, "data", "exercicis.xlsx")
 
 st.set_page_config(page_title="Rendiment de l'equip", layout="wide")
 
@@ -157,10 +161,15 @@ with tab_exercicis:
         st.info("Calcula primer les dades a la pestanya Resum.")
     else:
         try:
-            exercicis_df = pd.read_excel("data/exercicis.xlsx")
+            exercicis_df = pd.read_excel(EXERCICIS_PATH)
         except FileNotFoundError:
-            st.warning("No s'ha trobat data/exercicis.xlsx. Afegeix el fitxer al repositori.")
-            exercicis_df = pd.DataFrame(columns=["exercici", "url", "tags"])
+            st.warning(
+                f"No s'ha trobat el fitxer a `{EXERCICIS_PATH}`. "
+                "Comprova que `data/exercicis.xlsx` estigui pujat al repositori de GitHub "
+                "(no dins .gitignore, i amb aquest nom exacte i majúscules/minúscules)."
+            )
+            pujat = st.file_uploader("O puja'l aquí temporalment", type="xlsx", key="up_exercicis")
+            exercicis_df = pd.read_excel(pujat) if pujat else pd.DataFrame(columns=["exercici", "url", "tags"])
 
         deficiencies = []
         full_table = build_full_table()
