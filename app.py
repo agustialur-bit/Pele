@@ -2,13 +2,69 @@ import streamlit as st
 import pandas as pd
 import os
 
-from extraction import extract_matches, extract_match_id
+import token_bridge
+from extraction import extract_matches, extract_match_id, token_segons_restants
 from metrics import player_shooting_table, team_shooting_row, plus_minus_per_player, coaching_pearson
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 EXERCICIS_PATH = os.path.join(APP_DIR, "data", "exercicis.xlsx")
 
 st.set_page_config(page_title="Rendiment de l'equip", layout="wide")
+
+
+# ---------- Token de l'API ----------
+# Des del setembre 2026 l'API de la FCBQ demana un Bearer que emet
+# basquetcatala.cat després del seu reCAPTCHA i que dura 2 h. Es pot enganxar
+# a mà o deixar-lo aquí amb el bookmarklet (vegeu token_bridge.py).
+@st.cache_resource
+def arrenca_pont_token():
+    if token_bridge.es_al_nuvol():
+        return None
+    return token_bridge.inicia_receptor()
+
+
+def api_token():
+    tok = str(st.session_state.get("api_token") or "").strip()
+    if not tok:
+        tok = token_bridge.llegeix_token()
+    if not tok:
+        try: tok = str(st.secrets.get("FCBQ_TOKEN", "") or "").strip()
+        except Exception: tok = ""
+    if not tok:
+        tok = os.environ.get("FCBQ_TOKEN", "").strip()
+    if tok.lower().startswith("bearer "): tok = tok[7:].strip()
+    return tok
+
+
+with st.sidebar.expander("🔑 Token API", expanded=not api_token()):
+    _estat_pont = arrenca_pont_token()
+    if _estat_pont:
+        st.caption("El token dura 2 h. Per renovar-lo: obre un partit a "
+                   "basquetcatala.cat, espera que es vegin les dades i clica el "
+                   "marcador «Token Analítica». L'app el recull sola.")
+    else:
+        st.caption("El token dura 2 h. Per renovar-lo: obre un partit a "
+                   "basquetcatala.cat, espera que es vegin les dades, clica el "
+                   "marcador «Token Analítica» i **enganxa'l aquí sota** "
+                   "(al núvol no es pot recollir automàticament).")
+    st.text_input("Bearer token", key="api_token", type="password",
+                  placeholder="o enganxa'l aquí a mà", label_visibility="collapsed")
+    _tok = api_token()
+    if _tok:
+        _seg = token_segons_restants(_tok)
+        if _seg is None:  st.caption("⚠️ No sembla un JWT vàlid.")
+        elif _seg <= 0:   st.caption("🔴 Caducat — cal renovar-lo.")
+        else:             st.caption(f"🟢 Vàlid durant {_seg//60} min més.")
+    if _estat_pont: st.caption(f"Receptor: {_estat_pont}")
+    with st.popover("📌 Crear el marcador", use_container_width=True):
+        # Streamlit neteja les URL javascript: dels enllaços, així que el
+        # marcador s'ha de crear a mà enganxant-hi el codi.
+        st.markdown("""1. Copia el codi de sota (botó 📋 al cantó del bloc).
+2. Al navegador, **Ctrl+Shift+O** per obrir el gestor de marcadors.
+3. Menú **⋮** → **Afegeix un marcador nou**.
+4. Nom: `Token Analítica` · URL: **enganxa-hi el codi**.
+5. Desa. Només cal fer-ho un cop.""")
+        st.code(token_bridge.BOOKMARKLET, language="javascript")
 
 # ---------- Sidebar ----------
 st.sidebar.header("Partit(s)")
@@ -35,8 +91,9 @@ if run and match_input_raw.strip():
 
     with st.spinner("Extraient dades..."):
         try:
-            df_moves = extract_matches(match_ids)
-            equips_ids = [e for e in df_moves["idEquip"].unique() if e]
+            df_moves = extract_matches(match_ids, token=api_token())
+            equips_ids = [e for e in df_moves["idEquip"].unique() if e and e != "0"]
+            noms_api = df_moves.attrs.get("noms_equips") or {}
 
             player_table = player_shooting_table(df_moves)
             team_rows = [team_shooting_row(df_moves, eid) for eid in equips_ids]
@@ -49,14 +106,16 @@ if run and match_input_raw.strip():
             st.session_state.pearson = (r, p)
             st.session_state.df_moves = df_moves
             st.session_state.equips_ids = equips_ids
-            # Noms per defecte: primer equip que apareix = Local, segon = Visitant
-            # (mateixa convenció que la teva app actual). Si n'hi ha més (diversos
-            # rivals en partits diferents), es numeren.
+            # L'API nova sí que dona el nom real dels equips, així que es fan
+            # servir com a nom per defecte. Els genèrics "Equip Local/Visitant"
+            # queden com a recurs per si algun partit no en porta.
             visitants_n = 0
             for i, eid in enumerate(equips_ids):
                 if eid in st.session_state.team_names:
                     continue
-                if i == 0:
+                if noms_api.get(eid):
+                    st.session_state.team_names[eid] = noms_api[eid]
+                elif i == 0:
                     st.session_state.team_names[eid] = "Equip Local"
                 else:
                     visitants_n += 1
